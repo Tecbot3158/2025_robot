@@ -61,11 +61,20 @@ public class DriveTrain extends SubsystemBase {
    * This is a measure of how fast the robot should be able to drive in a straight line.
    */
 
-
-
+  // MK4I_L3
+  
+  /*  
   public static final double MAX_VELOCITY_METERS_PER_SECOND = 5820.0 / 60.0 *
           SdsModuleConfigurations.MK4I_L2.getDriveReduction() *
           SdsModuleConfigurations.MK4I_L2.getWheelDiameter()* Math.PI; // FIXME: this has to changfe for krakens!!
+  */
+
+  public static final double MAX_VELOCITY_METERS_PER_SECOND = 5820.0 / 60.0 *
+  SdsModuleConfigurations.MK4I_L3.getDriveReduction() *
+  SdsModuleConfigurations.MK4I_L3.getWheelDiameter()* Math.PI; // FIXME: have to check. the mk4i_l3 is the config... should check in krakens work with this setting. 
+  
+
+
   /**
    * The maximum angular velocity of the robot in radians per second.
    * <p>
