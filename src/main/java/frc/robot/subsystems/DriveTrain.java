@@ -12,6 +12,9 @@ import com.swervedrivespecialties.swervelib.MotorType;
 import com.swervedrivespecialties.swervelib.SdsModuleConfigurations;
 import com.swervedrivespecialties.swervelib.SwerveModule;
 
+import choreo.trajectory.SwerveSample;
+import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -20,6 +23,7 @@ import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInLayouts;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
@@ -30,6 +34,10 @@ import frc.robot.Constants;
 
 import static frc.robot.Constants.*;
 
+import java.util.Optional;
+
+import javax.lang.model.util.ElementScanner14;
+
 public class DriveTrain extends SubsystemBase {
 
    /*
@@ -39,7 +47,7 @@ public class DriveTrain extends SubsystemBase {
     * 2. Use the code : https://github.com/FRC4561TerrorBytes/TB2024/ or https://github.com/dirtbikerxz/BaseTalonFXSwerve
     * 3. Use another library as YAGSL ... 
     * 
-    * For now, let's test the thing thinking of two neos.... Doesn't appear to be bad.
+    * For now, let's test the thing thinking of two neos.... Doesn't appear to be bad. Update. It was not as Neo but as a falcon... Nevertheless, we had to include the full library
     */
 
 
@@ -61,11 +69,20 @@ public class DriveTrain extends SubsystemBase {
    * This is a measure of how fast the robot should be able to drive in a straight line.
    */
 
-
-
+  // MK4I_L3
+  
+  /*  
   public static final double MAX_VELOCITY_METERS_PER_SECOND = 5820.0 / 60.0 *
           SdsModuleConfigurations.MK4I_L2.getDriveReduction() *
           SdsModuleConfigurations.MK4I_L2.getWheelDiameter()* Math.PI; // FIXME: this has to changfe for krakens!!
+  */
+
+  public static final double MAX_VELOCITY_METERS_PER_SECOND = 5820.0 / 60.0 *
+  SdsModuleConfigurations.MK4I_L3.getDriveReduction() *
+  SdsModuleConfigurations.MK4I_L3.getWheelDiameter()* Math.PI; // FIXME: have to check. the mk4i_l3 is the config... should check in krakens work with this setting. 
+  
+
+
   /**
    * The maximum angular velocity of the robot in radians per second.
    * <p>
@@ -100,10 +117,50 @@ public class DriveTrain extends SubsystemBase {
 
   private ChassisSpeeds m_chassisSpeeds = new ChassisSpeeds(0.0, 0.0, 0.0);
 
+
+
+  PIDController xController = new PIDController(1, 0, 0);
+  PIDController yController = new PIDController(1, 0, 0);
+  PIDController headingController = new PIDController(1, 0, 0);
+ 
+  ShuffleboardTab tab = Shuffleboard.getTab("Drivetrain");
+  GenericEntry xSetpoint = tab.add("X Setpoint",0).getEntry();
+  GenericEntry ySetpoint = tab.add("Y Setpoint",0).getEntry();
+  GenericEntry hSetpoint = tab.add("H Setpoint",0).getEntry();
+
+  GenericEntry xP = tab.add("X P",0).getEntry();
+  GenericEntry yP = tab.add("Y P",0).getEntry();
+  GenericEntry hP = tab.add("H P",0).getEntry();
+  
+  public void setTarget(){
+      xController.setSetpoint(xSetpoint.getDouble(0.0));
+      yController.setSetpoint(ySetpoint.getDouble(0.0));
+      
+      double user_ang = hSetpoint.getDouble(0.0);
+      double ang = user_ang - 180;
+      if(ang > 0)
+        ang = -180 + ang;
+      else
+        ang = user_ang;
+      headingController.setSetpoint(ang*Math.PI/180.0);
+
+      xController.setP(xP.getDouble(1.0));
+      yController.setP(yP.getDouble(1.0));
+      headingController.setP(hP.getDouble(1.0));
+      
+  }
+
+
   public DriveTrain() {
     
    ShuffleboardTab tab = Shuffleboard.getTab("Drivetrain");
 
+    tab.add("X-controller" , xController);
+    tab.add("Y-controller", yController);
+    tab.add("H-controller", headingController);
+    
+    
+    
     // There are 4 methods you can call to create your swerve modules.
     // The method you use depends on what motors you are using.
     //
@@ -128,7 +185,7 @@ public class DriveTrain extends SubsystemBase {
     MotorType driveType = MotorType.FALCON; // the falcon 500 and the kraken are not that different as read on BaseTalonFXSwerve
     MotorType steerType = MotorType.NEO;
   
-     m_frontLeftModule = new MkSwerveModuleBuilder()
+    m_frontLeftModule = new MkSwerveModuleBuilder()
                 .withLayout(tab.getLayout("Front Left Module", BuiltInLayouts.kList)
                 .withSize(2, 4)
                 .withPosition(0, 0))
@@ -185,6 +242,11 @@ public class DriveTrain extends SubsystemBase {
                   m_backRightModule.getPosition()
                 }
               );
+
+
+     tab.addNumber("Pos X", () -> getPose2d().getX());
+     tab.addNumber("Pos Y", () -> getPose2d().getY());
+     tab.addNumber("Head!", () -> getPose2d().getRotation().getDegrees());
   }
 
   /**
@@ -203,16 +265,45 @@ public class DriveTrain extends SubsystemBase {
     }
 
     // We have to invert the angle of the NavX so that rotating the robot counter-clockwise makes the angle increase.
-    return Rotation2d.fromDegrees(360.0 - m_navx.getYaw());
+    return Rotation2d.fromDegrees(360.0 - m_navx.getAngle());
   }
 
   public void drive(ChassisSpeeds chassisSpeeds) {
     m_chassisSpeeds = chassisSpeeds;
   }
 
+  public void followPath(ChassisSpeeds chassisSpeeds) {
+    m_chassisSpeeds = chassisSpeeds;
+  }
 
+  public void setPose2D(Pose2d pose){
+    // always start the robot facing forward!!
+    odometer.resetPose(pose);
+  }
   public Pose2d getPose2d(){
+    
     return odometer.getPoseMeters();
+  }
+
+
+  
+  public void driveWithPID(){
+    
+    // the pid is resetting!!
+   double actualH = getPose2d().getRotation().getRadians();
+    
+
+   ChassisSpeeds speeds =  ChassisSpeeds.fromFieldRelativeSpeeds(
+    xController.calculate(getPose2d().getX()),
+    yController.calculate(getPose2d().getY()),
+    headingController.calculate(getPose2d().getRotation().getRadians()),
+    getGyroscopeRotation()
+   ); 
+
+   
+
+    this.followPath(speeds);
+
   }
 
 
